@@ -50,7 +50,11 @@ export default function Dashboard() {
     try {
       const res = await fetch(`/api/stats?range=${range}`)
       const data = await res.json()
-      setStats(data)
+      if (data.error) {
+        setStats({ apps: [], summary: { totalApps: 0, totalTxns: 0, totalUsers: 0 }, days: [] })
+      } else {
+        setStats(data)
+      }
       setLastUpdated(new Date().toLocaleTimeString('zh-CN'))
     } catch (e) {
       console.error(e)
