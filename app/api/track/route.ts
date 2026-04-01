@@ -1,7 +1,5 @@
-import { Redis } from '@upstash/redis'
 import { NextRequest, NextResponse } from 'next/server'
-
-const kv = Redis.fromEnv()
+import { kv } from '../../../utils/redis'
 
 export async function POST(req: NextRequest) {
   try {
