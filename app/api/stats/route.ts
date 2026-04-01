@@ -1,10 +1,11 @@
 import { Redis } from '@upstash/redis'
-const kv = Redis.fromEnv()
 import { NextRequest, NextResponse } from 'next/server'
+
+const kv = Redis.fromEnv()
 
 function getDaysAgo(n: number): string[] {
   const days = []
-  for (let i = n - 1; i >= 0; i--) {
+  for (let i = n - 1; i >= 0; i -= 1) {
     const d = new Date()
     d.setDate(d.getDate() - i)
     days.push(d.toISOString().slice(0, 10))
@@ -15,13 +16,11 @@ function getDaysAgo(n: number): string[] {
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
-    const range = parseInt(searchParams.get('range') || '7')
+    const range = parseInt(searchParams.get('range') || '7', 10)
     const days = getDaysAgo(range)
+    const appKeys = (await kv.smembers('apps')) as string[]
 
-    // 获取所有 App ID
-    const appIds = await kv.smembers('apps') as string[]
-
-    if (!appIds || appIds.length === 0) {
+    if (!appKeys || appKeys.length === 0) {
       return NextResponse.json({
         apps: [],
         summary: { totalApps: 0, totalTxns: 0, totalUsers: 0, totalOpens: 0, totalVolume: 0 },
@@ -29,27 +28,28 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // 并行拉取所有 App 数据
     const appData = await Promise.all(
-      appIds.map(async (appId) => {
-        const [name, txns, userCount, opens, volume] = await Promise.all([
-          kv.get<string>(`app:${appId}:name`),
-          kv.get<number>(`app:${appId}:txns`),
-          kv.scard(`app:${appId}:users`),
-          kv.get<number>(`app:${appId}:opens`),
-          kv.get<number>(`app:${appId}:volume`),
+      appKeys.map(async (appKey) => {
+        const [storedId, name, txns, userCount, opens, volume, knownNames] = await Promise.all([
+          kv.get<string>(`app:${appKey}:id`),
+          kv.get<string>(`app:${appKey}:name`),
+          kv.get<number>(`app:${appKey}:txns`),
+          kv.scard(`app:${appKey}:users`),
+          kv.get<number>(`app:${appKey}:opens`),
+          kv.get<number>(`app:${appKey}:volume`),
+          kv.smembers<string[]>(`app:${appKey}:names`),
         ])
 
-        // 拉取每日数据（用于趋势图）
         const dailyData = await Promise.all(
           days.map(async (day) => {
             const [dayTxns, newUsers, returningUsers, dayOpens, dayVolume] = await Promise.all([
-              kv.get<number>(`app:${appId}:day:${day}:txns`),
-              kv.scard(`app:${appId}:day:${day}:new_users`),
-              kv.scard(`app:${appId}:day:${day}:returning_users`),
-              kv.get<number>(`app:${appId}:day:${day}:opens`),
-              kv.get<number>(`app:${appId}:day:${day}:volume`),
+              kv.get<number>(`app:${appKey}:day:${day}:txns`),
+              kv.scard(`app:${appKey}:day:${day}:new_users`),
+              kv.scard(`app:${appKey}:day:${day}:returning_users`),
+              kv.get<number>(`app:${appKey}:day:${day}:opens`),
+              kv.get<number>(`app:${appKey}:day:${day}:volume`),
             ])
+
             return {
               date: day,
               txns: dayTxns || 0,
@@ -61,16 +61,17 @@ export async function GET(req: NextRequest) {
           })
         )
 
-        // 范围内的交易数和用户数（从日数据汇总）
-        const rangeTxns = dailyData.reduce((s, d) => s + d.txns, 0)
-        const rangeNewUsers = dailyData.reduce((s, d) => s + d.newUsers, 0)
-        const rangeReturning = dailyData.reduce((s, d) => s + d.returningUsers, 0)
-        const rangeOpens = dailyData.reduce((s, d) => s + d.opens, 0)
-        const rangeVolume = dailyData.reduce((s, d) => s + d.volume, 0)
+        const rangeTxns = dailyData.reduce((sum, day) => sum + day.txns, 0)
+        const rangeNewUsers = dailyData.reduce((sum, day) => sum + day.newUsers, 0)
+        const rangeReturning = dailyData.reduce((sum, day) => sum + day.returningUsers, 0)
+        const rangeOpens = dailyData.reduce((sum, day) => sum + day.opens, 0)
+        const rangeVolume = dailyData.reduce((sum, day) => sum + day.volume, 0)
 
         return {
-          app_id: appId,
-          app_name: name || appId,
+          app_key: appKey,
+          app_id: storedId || appKey,
+          app_name: name || storedId || appKey,
+          aliases: Array.isArray(knownNames) ? knownNames : [],
           total_txns: txns || 0,
           total_users: userCount || 0,
           total_opens: opens || 0,
@@ -86,17 +87,15 @@ export async function GET(req: NextRequest) {
       })
     )
 
-    // 汇总
+    appData.sort((a, b) => b.range_txns - a.range_txns)
+
     const summary = {
       totalApps: appData.length,
-      totalTxns: appData.reduce((s, a) => s + a.range_txns, 0),
-      totalUsers: appData.reduce((s, a) => s + a.range_users, 0),
-      totalOpens: appData.reduce((s, a) => s + a.range_opens, 0),
-      totalVolume: appData.reduce((s, a) => s + a.range_volume, 0),
+      totalTxns: appData.reduce((sum, app) => sum + app.range_txns, 0),
+      totalUsers: appData.reduce((sum, app) => sum + app.range_users, 0),
+      totalOpens: appData.reduce((sum, app) => sum + app.range_opens, 0),
+      totalVolume: appData.reduce((sum, app) => sum + app.range_volume, 0),
     }
-
-    // 按交易数降序排列
-    appData.sort((a, b) => b.range_txns - a.range_txns)
 
     return NextResponse.json({ apps: appData, summary, days })
   } catch (e) {
