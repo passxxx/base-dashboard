@@ -11,15 +11,15 @@ const RANGE_OPTIONS = [
 
 const APP_COLORS = ['#3d6ef5', '#1fd4a0', '#8b5cf6', '#f0c040', '#ef4444', '#f97316', '#06b6d4', '#ec4899']
 
-interface DayData { date: string; txns: number; newUsers: number; returningUsers: number }
+interface DayData { date: string; txns: number; newUsers: number; returningUsers: number; opens: number; volume: number }
 interface AppData {
   app_id: string; app_name: string;
-  total_txns: number; total_users: number;
+  total_txns: number; total_users: number; total_opens: number; total_volume: number;
   range_txns: number; range_users: number;
-  range_new_users: number; range_returning: number;
+  range_new_users: number; range_returning: number; range_opens: number; range_volume: number;
   daily: DayData[]
 }
-interface Stats { apps: AppData[]; summary: { totalApps: number; totalTxns: number; totalUsers: number }; days: string[] }
+interface Stats { apps: AppData[]; summary: { totalApps: number; totalTxns: number; totalUsers: number; totalOpens: number; totalVolume: number }; days: string[] }
 
 function Sparkline({ data, color }: { data: number[]; color: string }) {
   const max = Math.max(...data, 1)
@@ -117,7 +117,9 @@ export default function Dashboard() {
           { label: 'TOTAL APPS', value: stats?.summary.totalApps ?? '—', accent: '#3d6ef5', icon: '⬡' },
           { label: 'TRANSACTIONS', value: stats?.summary.totalTxns.toLocaleString() ?? '—', accent: '#1fd4a0', icon: '⇄' },
           { label: 'USERS', value: stats?.summary.totalUsers.toLocaleString() ?? '—', accent: '#8b5cf6', icon: '◈' },
-          { label: 'AVG TX/USER', value: stats && stats.summary.totalUsers > 0 ? (stats.summary.totalTxns / stats.summary.totalUsers).toFixed(1) : '—', accent: '#f0c040', icon: '◎' },
+          { label: 'APP OPENS', value: stats?.summary.totalOpens.toLocaleString() ?? '—', accent: '#f0c040', icon: '◎' },
+          { label: 'TX VOLUME', value: stats?.summary.totalVolume ? stats.summary.totalVolume.toFixed(2) : '—', accent: '#ef4444', icon: '◆' },
+          { label: 'AVG TX/USER', value: stats && stats.summary.totalUsers > 0 ? (stats.summary.totalTxns / stats.summary.totalUsers).toFixed(1) : '—', accent: '#06b6d4', icon: '⊙' },
         ].map((card, i) => (
           <div key={i} className={styles.summaryCard} style={{ '--accent': card.accent } as React.CSSProperties}>
             <div className={styles.summaryIcon}>{card.icon}</div>
@@ -182,6 +184,16 @@ export default function Dashboard() {
                     <div className={styles.metricSub}>tx/user: {txPerUser}</div>
                   </div>
                   <div className={styles.metricBox}>
+                    <div className={styles.metricLabel}>APP OPENS</div>
+                    <div className={styles.metricVal} style={{ color: '#f0c040' }}>{app.range_opens.toLocaleString()}</div>
+                    <div className={styles.metricSub}>总计 {app.total_opens}</div>
+                  </div>
+                  <div className={styles.metricBox}>
+                    <div className={styles.metricLabel}>TX VOLUME</div>
+                    <div className={styles.metricVal} style={{ color: '#ef4444' }}>{app.range_volume.toFixed(2)}</div>
+                    <div className={styles.metricSub}>总计 {app.total_volume.toFixed(2)}</div>
+                  </div>
+                  <div className={styles.metricBox}>
                     <div className={styles.metricLabel}>FIRST TIME</div>
                     <div className={styles.metricVal} style={{ color: '#1fd4a0' }}>{app.range_new_users}</div>
                   </div>
@@ -215,6 +227,8 @@ export default function Dashboard() {
                   <th>APP ID</th>
                   <th>交易数</th>
                   <th>用户数</th>
+                  <th>打开数</th>
+                  <th>交易量</th>
                   <th>新用户</th>
                   <th>回流</th>
                   <th>占比</th>
@@ -236,6 +250,8 @@ export default function Dashboard() {
                       <td><code className={styles.codeTag}>{app.app_id}</code></td>
                       <td><strong style={{ color }}>{app.range_txns.toLocaleString()}</strong></td>
                       <td>{app.range_users}</td>
+                      <td style={{ color: '#f0c040' }}>{app.range_opens.toLocaleString()}</td>
+                      <td style={{ color: '#ef4444' }}>{app.range_volume.toFixed(2)}</td>
                       <td style={{ color: '#1fd4a0' }}>{app.range_new_users}</td>
                       <td style={{ color: '#8b5cf6' }}>{app.range_returning}</td>
                       <td>
