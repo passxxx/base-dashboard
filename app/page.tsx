@@ -51,7 +51,11 @@ export default function Dashboard() {
       const res = await fetch(`/api/stats?range=${range}`)
       const data = await res.json()
       if (data.error) {
-        setStats({ apps: [], summary: { totalApps: 0, totalTxns: 0, totalUsers: 0 }, days: [] })
+        setStats({
+          apps: [],
+          summary: { totalApps: 0, totalTxns: 0, totalUsers: 0, totalOpens: 0, totalVolume: 0 },
+          days: [],
+        })
       } else {
         setStats(data)
       }
