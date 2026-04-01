@@ -62,7 +62,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('Track error:', e)
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Internal error', detail: e instanceof Error ? e.message : String(e) },
+      { status: 500 }
+    )
   }
 }
 

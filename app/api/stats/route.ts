@@ -94,6 +94,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ apps: appData, summary, days })
   } catch (e) {
     console.error('Stats error:', e)
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Internal error', detail: e instanceof Error ? e.message : String(e) },
+      { status: 500 }
+    )
   }
 }
