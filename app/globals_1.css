@@ -1,0 +1,22 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #07090f;
+  --surface: #0d1117;
+  --surface2: #161b27;
+  --border: #1e2840;
+  --blue: #3d6ef5;
+  --blue2: #5b87ff;
+  --green: #1fd4a0;
+  --purple: #8b5cf6;
+  --red: #ef4444;
+  --yellow: #f0c040;
+  --text: #e2e8f8;
+  --muted: #4a5878;
+  --dim: #2a3450;
+}
+
+html, body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; min-height: 100vh; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }

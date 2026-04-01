@@ -3,12 +3,15 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Base Mini App Dashboard',
-  description: 'Mini App 归因数据看板',
+  description: '归因监控看板',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh">
+      <head>
+        <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+      </head>
       <body>{children}</body>
     </html>
   )

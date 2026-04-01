@@ -1,5 +1,4 @@
-import { Redis } from '@upstash/redis'
-const kv = Redis.fromEnv()
+import { kv } from '@vercel/kv'
 import { NextRequest, NextResponse } from 'next/server'
 
 function getDaysAgo(n: number): string[] {
@@ -22,41 +21,31 @@ export async function GET(req: NextRequest) {
     const appIds = await kv.smembers('apps') as string[]
 
     if (!appIds || appIds.length === 0) {
-      return NextResponse.json({
-        apps: [],
-        summary: { totalApps: 0, totalTxns: 0, totalUsers: 0, totalOpens: 0, totalVolume: 0 },
-        days,
-      })
+      return NextResponse.json({ apps: [], summary: { totalApps: 0, totalTxns: 0, totalUsers: 0 } })
     }
 
     // 并行拉取所有 App 数据
     const appData = await Promise.all(
       appIds.map(async (appId) => {
-        const [name, txns, userCount, opens, volume] = await Promise.all([
+        const [name, txns, userCount] = await Promise.all([
           kv.get<string>(`app:${appId}:name`),
           kv.get<number>(`app:${appId}:txns`),
           kv.scard(`app:${appId}:users`),
-          kv.get<number>(`app:${appId}:opens`),
-          kv.get<number>(`app:${appId}:volume`),
         ])
 
         // 拉取每日数据（用于趋势图）
         const dailyData = await Promise.all(
           days.map(async (day) => {
-            const [dayTxns, newUsers, returningUsers, dayOpens, dayVolume] = await Promise.all([
+            const [dayTxns, newUsers, returningUsers] = await Promise.all([
               kv.get<number>(`app:${appId}:day:${day}:txns`),
               kv.scard(`app:${appId}:day:${day}:new_users`),
               kv.scard(`app:${appId}:day:${day}:returning_users`),
-              kv.get<number>(`app:${appId}:day:${day}:opens`),
-              kv.get<number>(`app:${appId}:day:${day}:volume`),
             ])
             return {
               date: day,
               txns: dayTxns || 0,
               newUsers: newUsers || 0,
               returningUsers: returningUsers || 0,
-              opens: dayOpens || 0,
-              volume: dayVolume || 0,
             }
           })
         )
@@ -65,22 +54,16 @@ export async function GET(req: NextRequest) {
         const rangeTxns = dailyData.reduce((s, d) => s + d.txns, 0)
         const rangeNewUsers = dailyData.reduce((s, d) => s + d.newUsers, 0)
         const rangeReturning = dailyData.reduce((s, d) => s + d.returningUsers, 0)
-        const rangeOpens = dailyData.reduce((s, d) => s + d.opens, 0)
-        const rangeVolume = dailyData.reduce((s, d) => s + d.volume, 0)
 
         return {
           app_id: appId,
           app_name: name || appId,
           total_txns: txns || 0,
           total_users: userCount || 0,
-          total_opens: opens || 0,
-          total_volume: volume || 0,
           range_txns: rangeTxns,
           range_new_users: rangeNewUsers,
           range_returning: rangeReturning,
           range_users: rangeNewUsers + rangeReturning,
-          range_opens: rangeOpens,
-          range_volume: rangeVolume,
           daily: dailyData,
         }
       })
@@ -91,8 +74,6 @@ export async function GET(req: NextRequest) {
       totalApps: appData.length,
       totalTxns: appData.reduce((s, a) => s + a.range_txns, 0),
       totalUsers: appData.reduce((s, a) => s + a.range_users, 0),
-      totalOpens: appData.reduce((s, a) => s + a.range_opens, 0),
-      totalVolume: appData.reduce((s, a) => s + a.range_volume, 0),
     }
 
     // 按交易数降序排列
