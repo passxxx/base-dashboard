@@ -20,10 +20,8 @@ interface DayData {
 }
 
 interface AppData {
-  app_key?: string
   app_id: string
   app_name: string
-  aliases?: string[]
   total_txns: number
   total_users: number
   total_opens: number
@@ -296,9 +294,6 @@ export default function Dashboard() {
                 <p className={styles.modalKicker}>Mini App 详情</p>
                 <h3 id="app-detail-title" className={styles.modalTitle}>{selectedApp.app_name}</h3>
                 <p className={styles.modalId}>{selectedApp.app_id}</p>
-                {selectedApp.aliases && selectedApp.aliases.length > 1 && (
-                  <p className={styles.aliasText}>历史上报名称: {selectedApp.aliases.join(' / ')}</p>
-                )}
               </div>
               <button type="button" className={styles.closeButton} onClick={() => setSelectedAppId(null)}>
                 关闭

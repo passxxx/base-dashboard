@@ -3,37 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 
 const kv = Redis.fromEnv()
 
-function normalizePart(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-z0-9_-]/g, '')
-}
-
-function buildAppKey(appId: string, appName?: string, explicitKey?: string) {
-  if (explicitKey && explicitKey.trim()) {
-    return explicitKey.trim().toLowerCase()
-  }
-
-  const normalizedId = normalizePart(appId)
-  const normalizedName = normalizePart(appName || 'unknown-app')
-  return `${normalizedId}__${normalizedName}`
-}
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const {
-      app_id,
-      app_name,
-      app_key,
-      user_address,
-      type = 'transaction',
-      tx_hash,
-      amount,
-      timestamp,
-    } = body
+    const { app_id, app_name, user_address, type = 'transaction', tx_hash, amount, timestamp } = body
 
     if (!app_id || !user_address) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -45,8 +18,6 @@ export async function POST(req: NextRequest) {
 
     const ts = timestamp || new Date().toISOString()
     const day = ts.slice(0, 10)
-    const appKey = buildAppKey(app_id, app_name, app_key)
-    const displayName = app_name || app_id
     const pipe = kv.pipeline()
 
     if (type === 'transaction') {
@@ -55,48 +26,42 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, duplicate: true })
       }
 
-      pipe.set(
-        `tx:${tx_hash}`,
-        { app_id, app_name: displayName, app_key: appKey, user_address, day },
-        { ex: 60 * 60 * 24 * 100 }
-      )
-      pipe.incr(`app:${appKey}:txns`)
-      pipe.incr(`app:${appKey}:day:${day}:txns`)
+      pipe.set(`tx:${tx_hash}`, { app_id, app_name, user_address, day }, { ex: 60 * 60 * 24 * 100 })
+      pipe.incr(`app:${app_id}:txns`)
+      pipe.incr(`app:${app_id}:day:${day}:txns`)
 
       if (amount && !isNaN(parseFloat(amount))) {
         const amountNum = parseFloat(amount)
-        pipe.incrbyfloat(`app:${appKey}:volume`, amountNum)
-        pipe.incrbyfloat(`app:${appKey}:day:${day}:volume`, amountNum)
+        pipe.incrbyfloat(`app:${app_id}:volume`, amountNum)
+        pipe.incrbyfloat(`app:${app_id}:day:${day}:volume`, amountNum)
       }
     } else if (type === 'open') {
-      const openKey = `open:${appKey}:${user_address}:${day}`
+      const openKey = `open:${app_id}:${user_address}:${day}`
       const isNewOpen = !(await kv.exists(openKey))
 
       if (isNewOpen) {
         pipe.set(openKey, 1, { ex: 60 * 60 * 24 * 100 })
-        pipe.incr(`app:${appKey}:opens`)
-        pipe.incr(`app:${appKey}:day:${day}:opens`)
+        pipe.incr(`app:${app_id}:opens`)
+        pipe.incr(`app:${app_id}:day:${day}:opens`)
       }
     }
 
-    pipe.set(`app:${appKey}:id`, app_id)
-    pipe.set(`app:${appKey}:name`, displayName)
-    pipe.sadd(`app:${appKey}:names`, displayName)
-    pipe.sadd('apps', appKey)
+    pipe.set(`app:${app_id}:name`, app_name)
+    pipe.sadd('apps', app_id)
 
     if (type === 'transaction') {
-      const isNewUser = !(await kv.sismember(`app:${appKey}:users`, user_address))
-      pipe.sadd(`app:${appKey}:users`, user_address)
+      const isNewUser = !(await kv.sismember(`app:${app_id}:users`, user_address))
+      pipe.sadd(`app:${app_id}:users`, user_address)
       if (isNewUser) {
-        pipe.sadd(`app:${appKey}:day:${day}:new_users`, user_address)
+        pipe.sadd(`app:${app_id}:day:${day}:new_users`, user_address)
       } else {
-        pipe.sadd(`app:${appKey}:day:${day}:returning_users`, user_address)
+        pipe.sadd(`app:${app_id}:day:${day}:returning_users`, user_address)
       }
     }
 
     await pipe.exec()
 
-    return NextResponse.json({ ok: true, app_key: appKey })
+    return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('Track error:', e)
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })

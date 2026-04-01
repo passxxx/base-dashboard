@@ -18,9 +18,9 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const range = parseInt(searchParams.get('range') || '7', 10)
     const days = getDaysAgo(range)
-    const appKeys = (await kv.smembers('apps')) as string[]
+    const appIds = (await kv.smembers('apps')) as string[]
 
-    if (!appKeys || appKeys.length === 0) {
+    if (!appIds || appIds.length === 0) {
       return NextResponse.json({
         apps: [],
         summary: { totalApps: 0, totalTxns: 0, totalUsers: 0, totalOpens: 0, totalVolume: 0 },
@@ -29,25 +29,23 @@ export async function GET(req: NextRequest) {
     }
 
     const appData = await Promise.all(
-      appKeys.map(async (appKey) => {
-        const [storedId, name, txns, userCount, opens, volume, knownNames] = await Promise.all([
-          kv.get<string>(`app:${appKey}:id`),
-          kv.get<string>(`app:${appKey}:name`),
-          kv.get<number>(`app:${appKey}:txns`),
-          kv.scard(`app:${appKey}:users`),
-          kv.get<number>(`app:${appKey}:opens`),
-          kv.get<number>(`app:${appKey}:volume`),
-          kv.smembers<string[]>(`app:${appKey}:names`),
+      appIds.map(async (appId) => {
+        const [name, txns, userCount, opens, volume] = await Promise.all([
+          kv.get<string>(`app:${appId}:name`),
+          kv.get<number>(`app:${appId}:txns`),
+          kv.scard(`app:${appId}:users`),
+          kv.get<number>(`app:${appId}:opens`),
+          kv.get<number>(`app:${appId}:volume`),
         ])
 
         const dailyData = await Promise.all(
           days.map(async (day) => {
             const [dayTxns, newUsers, returningUsers, dayOpens, dayVolume] = await Promise.all([
-              kv.get<number>(`app:${appKey}:day:${day}:txns`),
-              kv.scard(`app:${appKey}:day:${day}:new_users`),
-              kv.scard(`app:${appKey}:day:${day}:returning_users`),
-              kv.get<number>(`app:${appKey}:day:${day}:opens`),
-              kv.get<number>(`app:${appKey}:day:${day}:volume`),
+              kv.get<number>(`app:${appId}:day:${day}:txns`),
+              kv.scard(`app:${appId}:day:${day}:new_users`),
+              kv.scard(`app:${appId}:day:${day}:returning_users`),
+              kv.get<number>(`app:${appId}:day:${day}:opens`),
+              kv.get<number>(`app:${appId}:day:${day}:volume`),
             ])
 
             return {
@@ -68,10 +66,8 @@ export async function GET(req: NextRequest) {
         const rangeVolume = dailyData.reduce((sum, day) => sum + day.volume, 0)
 
         return {
-          app_key: appKey,
-          app_id: storedId || appKey,
-          app_name: name || storedId || appKey,
-          aliases: Array.isArray(knownNames) ? knownNames : [],
+          app_id: appId,
+          app_name: name || appId,
           total_txns: txns || 0,
           total_users: userCount || 0,
           total_opens: opens || 0,
